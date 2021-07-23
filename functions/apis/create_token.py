@@ -42,10 +42,10 @@ def handler(event, context):
         'token': token
     }
 
-    return respond(200, json.dumps(res))
+    return respond(200, res)
 
 def respond(statusCode, body):
     return {
         'statusCode': statusCode,
-        'body': body
+        'body': json.dumps(body)
     }
