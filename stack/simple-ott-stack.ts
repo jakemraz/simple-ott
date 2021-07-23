@@ -2,17 +2,21 @@ import * as cdk from '@aws-cdk/core';
 import * as iam from '@aws-cdk/aws-iam';
 import * as apigw from '@aws-cdk/aws-apigateway';
 import * as ddb from '@aws-cdk/aws-dynamodb';
+import * as lambda from '@aws-cdk/aws-lambda';
+import * as path from 'path';
 import { AppContext } from '../lib/app-context';
-import { ApiLambdas } from '../constructs/api-lambdas';
+
 
 export class SimpleOttStack extends cdk.Stack {
+
+  private readonly table: ddb.ITable;
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
 
-    const table = new ddb.Table(this, 'OttTable', {
+    this.table = new ddb.Table(this, 'OttTable', {
       partitionKey: { name: 'token', type: ddb.AttributeType.STRING },
-      timeToLiveAttribute: 'TTL'
+      timeToLiveAttribute: 'TTL',
     });
 
     const api = new apigw.RestApi(this, 'RestApi', {
@@ -21,14 +25,26 @@ export class SimpleOttStack extends cdk.Stack {
       },
     })
 
-    const lambdas = new ApiLambdas(this, 'Lambdas');
-    table.grantFullAccess(lambdas.createToken);
-    table.grantReadData(lambdas.checkToken);
+    const createToken = this.createLambdaFunction('CreateToken', 'create_token.handler', );
+    const checkToken = this.createLambdaFunction('CheckToken', 'check_token.handler');
+    this.table.grantFullAccess(createToken);
+    this.table.grantReadData(checkToken);
     
     const token = api.root.addResource('token')
-    token.addMethod('POST', new apigw.LambdaIntegration(lambdas.createToken));
-    token.addMethod('GET', new apigw.LambdaIntegration(lambdas.checkToken));
+    token.addMethod('POST', new apigw.LambdaIntegration(createToken));
+    token.addMethod('GET', new apigw.LambdaIntegration(checkToken));
     
+  }
+
+  private createLambdaFunction(id: string, handler: string) {
+    return new lambda.Function(this, id, {
+      code: lambda.Code.fromAsset(path.resolve(__dirname, '..', 'functions', 'apis')),
+      runtime: lambda.Runtime.PYTHON_3_8,
+      handler,
+      environment: {
+        OTT_TABLE: this.table.tableName
+      },
+    });
   }
 
 }
